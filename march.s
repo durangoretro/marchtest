@@ -1,7 +1,7 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250629-1946
+; last modified 20250629-2001
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
@@ -201,6 +201,7 @@ marchup:
 		JMP marchU			; because of distance...
 
 zp_error:
+.(
 	TAX						; bat bit mask is in A, save it to X
 	TXS  					; then save it in the SP
 
@@ -258,19 +259,16 @@ bit_beep:
 
 ; pause betwen beeping ~1.5 sec
 		LDX #3
-dl1:
+dl:
 			inline_delay_cycles_ay 500000;***
 			DEX
-			BNE dl1
+			BNE dl
 		JMP beeploop
-
-; *** bad ZP/SP message ***
-bad_msg:
-	.asc	"ZP/SP ERR", 0
-bad_msg_len = * - bad_msg
+.)
 
 zp_good:
-; *** some proc section *** REVISE
+; *** some proc section, I hope it's OK ***
+.(
 page_test:
 		; ldx #$F0				; simulate error
 		; jmp page_error
@@ -309,8 +307,9 @@ wr:
 		INY
 		BNE wr
 	JMP page_ok
-
+.)
 page_error:
+.(
 	; TAX				; bat bit mask is in A, save it to X
 	TXS  					; then save it in the SP
 
@@ -378,14 +377,12 @@ bit_beep:
 
 	; pause betwen beeping ~1.5 sec
 	ldx #3
-dl2:	inline_delay_cycles_ay 500000
+dl:	inline_delay_cycles_ay 500000
 	dex
-	bne dl2
+	bne dl
 
 	JMP beeploop
-
-bad_page_msg:
-	.asc	"PAGE ERR", 0
+.)
 
 page_ok:
 
@@ -395,3 +392,10 @@ page_ok:
 tst_tbl:
 	.byt	$80,$40,$20,$10, $08,$04,$02,$01,$00,$FF,$A5,$5A 
 tst_tbl_end:
+; *** bad ZP/SP and other messages ***
+bad_msg:
+	.asc	"ZP/SP ERR", 0
+bad_msg_len = * - bad_msg
+bad_page_msg:
+	.asc	"PAGE ERR", 0
+
