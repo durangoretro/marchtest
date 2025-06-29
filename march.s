@@ -1,10 +1,10 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250620-1630
+; last modified 20250629-1825
 
 ; xa march.s
-; add -DPOCKET for non-cartridge, standard RAM-loaded version
+; add -DPOCKET for non-cartridge, standard RAM version
 
 ; *** hardware definitions ***
 
@@ -32,7 +32,7 @@ rom_start:
 	.byt	13				; [7]=NEWLINE, second magic number
 ; filename
 	.asc	"marchtest", 0	; C-string with filename @ [8]
-	.asc	"Based on an original idea by Adrian Black/World of Jani/IZ8DWF/David Giller", 0	; comment with IMPORTANT attribution
+	.asc	"Based on the work from Adrian Black/World of Jani/IZ8DWF/David Giller", 0	; comment with IMPORTANT attribution
 
 ; advance to end of header
 	.dsb	rom_start + $E6 - *, $FF
@@ -44,8 +44,8 @@ rom_start:
 ; NEW coded version number
 	.word	$1001			; 1.0a1		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
 ; date & time in MS-DOS format at byte 248 ($F8)
-	.word	$8800			; time, 17.00		1000 1-000 000-0 0000
-	.word	$5AD4			; date, 2025/6/20	0101 101-0 110-1 0100
+	.word	$9400			; time, 18.32		1001 0-100 000-0 0000
+	.word	$5ADD			; date, 2025/6/29	0101 101-0 110-1 1101
 ; filesize in top 32 bits (@ $FC) now including header ** must be EVEN number of pages because of 512-byte sectors
 	.word	file_end-rom_start			; actual executable size
 	.word	0							; 64K space does not use upper 16 bits, [255]=NUL may be third magic number
@@ -107,11 +107,16 @@ marchU1:
 			STA $0100,Y		; w0s - also stack page
 			INY				; count up
 			BNE marchU1		; repeat until Y overflows back to zero
+
 ; 100ms delay for finding bit rot (unlikely on Durango's SRAM)
-;marchU1delay:
+		TYA					; Y known to be zero, now A as well
+marchU1delay:
+				INY
+				BNE marchU1delay	; 1279t inner loop
+			CLC:ADC #1				; NMOS-savvy
+			BNE marchU1delay		; total 329215t, ~94 mS @ 3.5 MHz, ~214 mS @ 1,536 MHz
 
-		LDY #$00		; reset Y to 0
-
+;		LDY #$00			; reset Y to 0 -- no longer needed
 ; step 2; up - r0,w1
 ; A contains test value from prev step
 marchU2:
@@ -130,7 +135,12 @@ marchU2:
 
 ; 100ms delay for finding bit rot (unlikely on Durango's SRAM)
 ;marchU2delay:
+				INY
+				BNE marchU2delay	; 1279t inner loop
+			CLC:ADC #1				; NMOS-savvy
+			BNE marchU2delay		; total 329215t, ~94 mS @ 3.5 MHz, ~214 mS @ 1,536 MHz
 
+; skip to remainder of ZP/Stack test
 		JMP continue
 
 zp_bad:
@@ -188,7 +198,7 @@ marchU4:
 	JMP zp_good				; *** ZP/stack test ended ***
 
 marchup:
-		JMP marchU
+		JMP marchU			; because of distance...
 
 zp_good:
 
