@@ -1,7 +1,7 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250629-1825
+; last modified 20250629-1946
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
@@ -200,7 +200,194 @@ marchU4:
 marchup:
 		JMP marchU			; because of distance...
 
+zp_error:
+	TAX						; bat bit mask is in A, save it to X
+	TXS  					; then save it in the SP
+
+; *** display some message ***
+  
+	TSX						; retrieve the test value
+	TXA
+	LDY #0
+print_bit:; ******
+	asl				; get top bit into carry flag
+		tax				; save the current value
+		lda #'0'|$80
+		adc #0			; increment by one if we had a carry
+		sta $075A,Y		; print bit to screen
+		txa
+		iny
+		cpy #8
+		bne print_bit	; repeat 8 times
+
+; find the bit to beep out
+	TSX						; get the bad bit mask back into A
+	TXA
+	LDX #1					; count up
+chkbit:	
+		LSR					; move lowest bit into carry
+	BCS start_beeping		; bit set, display it
+		INX					; count down
+		CPX #$09
+		BNE chkbit			; test next bit
+	JMP *					; only get here if there was no bad bit
+
+; now X contains the index of the bit, starting at 1
+start_beeping:
+	TXS						; save the bit index of the top set bit into SP
+beeploop:
+		LDA #1
+type_beep:					; beep an annoying chirp to indicate page err
+			inline_beep_xy $FF, $FF
+			SEC
+			SBC #1
+			BPL type_beep
+
+		TSX					; fetch the bit number
+		TXA
+bit_beep:
+			TAX
+			inline_delay_cycles_ay 400000;***
+			TXA
+;			sta TXTCLR 			; turn on graphics
+			inline_beep_xy $FF, $80
+;			sta TXTSET			; text mode
+			SEC
+			SBC #1
+			BNE bit_beep
+
+; pause betwen beeping ~1.5 sec
+		LDX #3
+dl1:
+			inline_delay_cycles_ay 500000;***
+			DEX
+			BNE dl1
+		JMP beeploop
+
+; *** bad ZP/SP message ***
+bad_msg:
+	.asc	"ZP/SP ERR", 0
+bad_msg_len = * - bad_msg
+
 zp_good:
+; *** some proc section *** REVISE
+page_test:
+		; ldx #$F0				; simulate error
+		; jmp page_error
+
+	LDA #0					; write zero to zp location 0
+	TAY
+wz:
+		STA $00,Y
+		DEY
+		BNE wz
+
+wr:
+		STA $0100,Y			; write to the pages
+		LDX $00,Y			; check the zp address
+		BNE page_error
+		STA $0200,Y
+		LDX $00,Y			; check the zp address
+		BNE page_error
+		STA $0400,Y
+		LDX $00,Y			; check the zp address
+		BNE page_error
+#ifndef	POCKET
+		STA $0800,Y
+		LDX $00,Y			; check the zp address
+		BNE page_error
+#endif
+		STA $1000,Y
+		LDX $00,Y			; check the zp address
+		BNE page_error
+		STA $2000,Y
+		LDX $00,Y			; check the zp address
+		BNE page_error
+		STA $4000,Y
+		LDX $00,Y			; check the zp address
+		BNE page_error
+		INY
+		BNE wr
+	JMP page_ok
+
+page_error:
+	; TAX				; bat bit mask is in A, save it to X
+	TXS  					; then save it in the SP
+
+;	STA TXTSET		; text mode
+;	sta MIXSET		; mixed mode on
+;	STA LOWSCR		; page 2 off
+;	inline_cls
+;	inline_print bad_page_msg, $0750;*****
+
+	TSX						; retrieve the test value
+	TXA
+	LDY #0
+print_bit:;***********
+	asl				; get top bit into carry flag
+	tax				; save the current value
+	lda #'0'|$80
+	adc #0			; increment by one if we had a carry
+	sta $0759,Y		; print bit to screen
+	txa
+	iny
+	cpy #8
+	bne print_bit	; repeat 8 times
+
+; find the bit to beep out
+	TSX						; get the bad bit mask back into A
+	TXA
+	CMP #$FF				; if it's FF, it's a motherboard error
+	BEQ start_beeping
+	LDX #1					; count up
+page_chkbit:	
+		LSR					; move lowest bit into carry
+	BCS start_beeping		; bit set, display it
+		inx					; count down
+		cpx #$09
+		bne page_chkbit		; test next bit
+	JMP *					; only get here if there was no bad bit
+
+; now X contains the index of the bit, starting at 1
+start_beeping:
+	txs					; save the bit index of the top set bit into SP
+beeploop:
+	ldx #5
+type_beep:				; beep an annoying chirp to indicate page err
+	inline_delay_cycles_ay 30000
+	txa
+	inline_beep_xy $40, $40
+	tax
+	dex
+	bne type_beep
+
+	tsx					; fetch the bit number
+	txa
+	cmp #$FF
+	beq beeploop		; continuous beeping for MB error
+bit_beep:
+	tax
+	inline_delay_cycles_ay 400000
+	txa
+	sta TXTCLR 			; turn on graphics
+	inline_beep_xy $FF, $80
+	sta TXTSET			; text mode
+	sec
+	sbc #1
+	bne bit_beep
+
+	; pause betwen beeping ~1.5 sec
+	ldx #3
+dl2:	inline_delay_cycles_ay 500000
+	dex
+	bne dl2
+
+	JMP beeploop
+
+bad_page_msg:
+	.asc	"PAGE ERR", 0
+
+page_ok:
 
 ; ************
 ; *** data ***
