@@ -1,7 +1,7 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250630-0931
+; last modified 20250630-1154
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
@@ -9,6 +9,7 @@
 ; *** macros ***
 #define	BEEP(l,p)	LDX#(l):LDY#(p):DEY:NOP:NOP:BNE *-3:DEX:STX$DFB0:BNE *-11
 #define DELAY(c)	LDA#>(c/9):LDY#<(c/9):CPY#1:DEY:SBC#0:BCS *-5
+#define PRINT(m,d)	LDY#0:LDA m,Y:BEQ *+32:ASL:ASL:TAX:LDA font,X:STA d,Y:LDA font+1,X:STA d+32,Y:LDA font+2,X:STA d+64,Y:LDA font+3,X:STA d+96,Y:INY:BNE *-33
 
 ; *** hardware definitions ***
 
@@ -114,8 +115,8 @@ marchU1:
 
 ; 100ms delay for finding bit rot (unlikely on Durango's SRAM)
 marchU1delay:
-			DELAY(35000)
-			LDY #$00		; reset Y to 0
+		DELAY(35000)
+		LDY #$00			; reset Y to 0
 
 ; step 2; up - r0,w1
 ; A contains test value from prev step
@@ -135,7 +136,7 @@ marchU2:
 
 ; 100ms delay for finding bit rot (unlikely on Durango's SRAM)
 marchU2delay:
-			DELAY(35000)
+		DELAY(35000)
 
 ; skip to remainder of ZP/Stack test
 		JMP continue
@@ -311,11 +312,7 @@ page_error:
 	; TAX					; bat bit mask is in A, save it to X
 	TXS  					; then save it in the SP
 
-;	STA TXTSET				; text mode
-;	sta MIXSET				; mixed mode on
-;	STA LOWSCR				; page 2 off
-;	inline_cls
-;	inline_print bad_page_msg, $0750;*****
+	PRINT(bad_page_msg,$7040)		; ***CHECK
 
 	TSX						; retrieve the test value
 	TXA
@@ -391,6 +388,7 @@ page_ok:
 tst_tbl:
 	.byt	$80,$40,$20,$10, $08,$04,$02,$01,$00,$FF,$A5,$5A 
 tst_tbl_end:
+
 ; *** bad ZP/SP and other messages ***
 bad_msg:
 	.asc	"ZP/SP ERR", 0
@@ -398,3 +396,22 @@ bad_msg_len = * - bad_msg
 bad_page_msg:
 	.asc	"PAGE ERR", 0
 
+; *** 8x4 font (ASCII 32-95) for quick inline display ***
+font:
+	.byt	0, 0, 0, 0,		8, 8, 0, 8,		20, 20, 0, 0,		36, 126, 36, 126	;  !"#
+	.byt	8, 30, 60, 8,	; $%&'
+	.byt		; ()*+
+	.byt		; ,-./
+	.byt		; 0123
+	.byt		; 4567
+	.byt		; 89:;
+	.byt		; <=>?
+	.byt		; @ABC
+	.byt		; DEFG
+	.byt		; HIJK
+	.byt		; LMNO
+	.byt		; PQRS
+	.byt		; TUVW
+	.byt		; XYZ[
+	.byt		; \] caret _
+	
