@@ -1,18 +1,24 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250630-1750
+; last modified 20250630-2305
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
+; add -DSAFE to make sure NOT to use stack EVER
 
 ; *** macros ***
-#define	BEEP(l,p)	LDX#l:LDY#p:DEY:NOP:NOP:BNE *-3:DEX:STX$DFB0:BNE *-11
+#define	BEEP(l,p)	LDX#l:LDY#p:DEY:NOP:NOP:BNE *-3:DEX:STX IOBeep:BNE *-11
 #define DELAY(c)	LDA#>(c/9):LDY#<(c/9):CPY#1:DEY:SBC#0:BCS *-5
 #define PRINT(m,d)	LDY#0:LDA m,Y:BEQ *+32:ASL:ASL:TAX:LDA font,X:STA d,Y:LDA font+1,X:STA d+32,Y:LDA font+2,X:STA d+64,Y:LDA font+3,X:STA d+96,Y:INY:BNE *-33
-#define CHAR(d)		ASL:ASL:TAY:LDA font,Y:STA d:LDA font+1,Y:STA d+32:LDA font+2,Y:STA d+64:LDA font+3,Y:STA d+96
+#define CHAR(d)		ASL:ASL:TAX:LDA font,X:STA d:LDA font+1,X:STA d+32:LDA font+2,X:STA d+64:LDA font+3,X:STA d+96
+#define CHAR_Y(d)	ASL:ASL:TAX:LDA font,X:STA d,Y:LDA font+1,X:STA d+32,Y:LDA font+2,X:STA d+64,Y:LDA font+3,X:STA d+96,Y
 
 ; *** hardware definitions ***
+IO8mode	=	$DF80
+IOAie	=	$DFA0
+IOBeep	=	$DFB0
+
 
 #ifdef	POCKET
 * = $0800					; standard pocket address
@@ -68,8 +74,8 @@ reset:
 	LDA #%10110000			; HIRES mode as usual
 	STA IO8mode
 ; make a clear strip for pres-test progress
-	LDA #0					; not using STZ
-	TAX
+	LDX #0					; not using STZ
+	TXA
 clear:
 		STA $7000, X		; about middle of the screen
 		INX
@@ -208,17 +214,71 @@ zp_error:
  
 	TSX						; retrieve the test value
 	TXA
+
+#ifdef	SAFE
+; printing the bits must be inlined, as we ran out of registers
+	ASL						; get top bit into carry flag
+	TAY						; save the current value
+	LDA #'0'
+	ADC #0					; increment by one if we had a carry
+	CHAR($704A)				; print bit to screen, note position
+	TYA
+	ASL						; same for all 8 bits
+	TAY
+	LDA #'0'
+	ADC #0
+	CHAR($704B)
+	TYA
+	ASL						; same for all 8 bits
+	TAY
+	LDA #'0'
+	ADC #0
+	CHAR($704C)
+	TYA
+	ASL						; same for all 8 bits
+	TAY
+	LDA #'0'
+	ADC #0
+	CHAR($704D)
+	TYA
+	ASL						; same for all 8 bits
+	TAY
+	LDA #'0'
+	ADC #0
+	CHAR($704E)
+	TYA
+	ASL						; same for all 8 bits
+	TAY
+	LDA #'0'
+	ADC #0
+	CHAR($704F)
+	TYA
+	ASL						; same for all 8 bits
+	TAY
+	LDA #'0'
+	ADC #0
+	CHAR($7050)
+	TYA
+	ASL						; same for all 8 bits
+;	TAY						; no need for last save
+	LDA #'0'
+	ADC #0
+	CHAR($7051)
+;	TYA
+#else
+; otherwise try to stack A and hope for the best!
 	LDY #0
 print_bit:
 		ASL					; get top bit into carry flag
-		TAX					; save the current value
-		LDA #'0'|$80
+		PHA					; save the current value, hopefully
+		LDA #'0'
 		ADC #0				; increment by one if we had a carry
-		STA $075A,Y			; print bit to screen****
-		TXA
+		CHAR_Y($704A)		; print bit to screen
+		PLA
 		INY
 		CPY #8
 		BNE print_bit		; repeat 8 times
+#endif
 
 ; find the bit to beep out
 	TSX						; get the bad bit mask back into A
@@ -314,21 +374,74 @@ page_error:
 	; TAX					; bat bit mask is in A, save it to X
 	TXS  					; then save it in the SP
 
-	PRINT(bad_page_msg,$7040)		; ***CHECK
+	PRINT(bad_page_msg,$7040)
 
 	TSX						; retrieve the test value
 	TXA
+#ifdef	SAFE
+; printing the bits must be inlined, as we ran out of registers
+	ASL						; get top bit into carry flag
+	TAY						; save the current value
+	LDA #'0'
+	ADC #0					; increment by one if we had a carry
+	CHAR($7049)				; print bit to screen, note position
+	TYA
+	ASL						; same for all 8 bits
+	TAY
+	LDA #'0'
+	ADC #0
+	CHAR($704A)
+	TYA
+	ASL						; same for all 8 bits
+	TAY
+	LDA #'0'
+	ADC #0
+	CHAR($704B)
+	TYA
+	ASL						; same for all 8 bits
+	TAY
+	LDA #'0'
+	ADC #0
+	CHAR($704C)
+	TYA
+	ASL						; same for all 8 bits
+	TAY
+	LDA #'0'
+	ADC #0
+	CHAR($704D)
+	TYA
+	ASL						; same for all 8 bits
+	TAY
+	LDA #'0'
+	ADC #0
+	CHAR($704E)
+	TYA
+	ASL						; same for all 8 bits
+	TAY
+	LDA #'0'
+	ADC #0
+	CHAR($704F)
+	TYA
+	ASL						; same for all 8 bits
+;	TAY						; no need for last save
+	LDA #'0'
+	ADC #0
+	CHAR($7050)
+;	TYA
+#else
+; otherwise try to stack A and hope for the best!
 	LDY #0
 print_bit:
 		ASL					; get top bit into carry flag
-		TAX					; save the current value
-		LDA #'0'|$80
+		PHA					; save the current value, hopefully
+		LDA #'0'
 		ADC #0				; increment by one if we had a carry
-		STA $0759,Y			; print bit to screen***********
-		TXA
+		CHAR_Y($7049)		; print bit to screen
+		PLA
 		INY
 		CPY #8
 		BNE print_bit		; repeat 8 times
+#endif
 
 ; find the bit to beep out
 	TSX						; get the bad bit mask back into A
@@ -365,9 +478,9 @@ bit_beep:
 		TAX
 		DELAY(140000)
 		TXA
-		sta TXTCLR 			; ****turn on graphics
+;		sta TXTCLR 			; ****turn on graphics
 		BEEP($FF,$80)
-		sta TXTSET			; ****text mode
+;		sta TXTSET			; ****text mode
 		SEC
 		SBC #1
 		BNE bit_beep
