@@ -1,10 +1,14 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250629-2001
+; last modified 20250630-0931
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
+
+; *** macros ***
+#define	BEEP(l,p)	LDX#(l):LDY#(p):DEY:NOP:NOP:BNE *-3:DEX:STX$DFB0:BNE *-11
+#define DELAY(c)	LDA#>(c/9):LDY#<(c/9):CPY#1:DEY:SBC#0:BCS *-5
 
 ; *** hardware definitions ***
 
@@ -109,14 +113,10 @@ marchU1:
 			BNE marchU1		; repeat until Y overflows back to zero
 
 ; 100ms delay for finding bit rot (unlikely on Durango's SRAM)
-		TYA					; Y known to be zero, now A as well
 marchU1delay:
-				INY
-				BNE marchU1delay	; 1279t inner loop
-			CLC:ADC #1				; NMOS-savvy
-			BNE marchU1delay		; total 329215t, ~94 mS @ 3.5 MHz, ~214 mS @ 1,536 MHz
+			DELAY(35000)
+			LDY #$00		; reset Y to 0
 
-;		LDY #$00			; reset Y to 0 -- no longer needed
 ; step 2; up - r0,w1
 ; A contains test value from prev step
 marchU2:
@@ -134,11 +134,8 @@ marchU2:
 			BNE marchU2		; repeat until Y overflows back to zero
 
 ; 100ms delay for finding bit rot (unlikely on Durango's SRAM)
-;marchU2delay:
-				INY
-				BNE marchU2delay	; 1279t inner loop
-			CLC:ADC #1				; NMOS-savvy
-			BNE marchU2delay		; total 329215t, ~94 mS @ 3.5 MHz, ~214 mS @ 1,536 MHz
+marchU2delay:
+			DELAY(35000)
 
 ; skip to remainder of ZP/Stack test
 		JMP continue
@@ -206,20 +203,19 @@ zp_error:
 	TXS  					; then save it in the SP
 
 ; *** display some message ***
-  
 	TSX						; retrieve the test value
 	TXA
 	LDY #0
-print_bit:; ******
-	asl				; get top bit into carry flag
-		tax				; save the current value
-		lda #'0'|$80
-		adc #0			; increment by one if we had a carry
-		sta $075A,Y		; print bit to screen
-		txa
-		iny
-		cpy #8
-		bne print_bit	; repeat 8 times
+print_bit:
+		ASL					; get top bit into carry flag
+		TAX					; save the current value
+		LDA #'0'|$80
+		ADC #0				; increment by one if we had a carry
+		STA $075A,Y			; print bit to screen****
+		TXA
+		INY
+		CPY #8
+		BNE print_bit		; repeat 8 times
 
 ; find the bit to beep out
 	TSX						; get the bad bit mask back into A
@@ -239,7 +235,7 @@ start_beeping:
 beeploop:
 		LDA #1
 type_beep:					; beep an annoying chirp to indicate page err
-			inline_beep_xy $FF, $FF
+			BEEP($FF,$FF)
 			SEC
 			SBC #1
 			BPL type_beep
@@ -248,19 +244,21 @@ type_beep:					; beep an annoying chirp to indicate page err
 		TXA
 bit_beep:
 			TAX
-			inline_delay_cycles_ay 400000;***
+			DELAY(466667)
+			DELAY(466667)
+			DELAY(466667)	; 4-second delay
 			TXA
-;			sta TXTCLR 			; turn on graphics
-			inline_beep_xy $FF, $80
-;			sta TXTSET			; text mode
+;			sta TXTCLR 		; turn on graphics***
+			BEEP($FF,$80)
+;			sta TXTSET		; text mode***
 			SEC
 			SBC #1
 			BNE bit_beep
 
 ; pause betwen beeping ~1.5 sec
-		LDX #3
+		LDX #10
 dl:
-			inline_delay_cycles_ay 500000;***
+			DELAY(525000)
 			DEX
 			BNE dl
 		JMP beeploop
@@ -270,7 +268,7 @@ zp_good:
 ; *** some proc section, I hope it's OK ***
 .(
 page_test:
-		; ldx #$F0				; simulate error
+		; ldx #$F0			; simulate error
 		; jmp page_error
 
 	LDA #0					; write zero to zp location 0
@@ -310,28 +308,28 @@ wr:
 .)
 page_error:
 .(
-	; TAX				; bat bit mask is in A, save it to X
+	; TAX					; bat bit mask is in A, save it to X
 	TXS  					; then save it in the SP
 
-;	STA TXTSET		; text mode
-;	sta MIXSET		; mixed mode on
-;	STA LOWSCR		; page 2 off
+;	STA TXTSET				; text mode
+;	sta MIXSET				; mixed mode on
+;	STA LOWSCR				; page 2 off
 ;	inline_cls
 ;	inline_print bad_page_msg, $0750;*****
 
 	TSX						; retrieve the test value
 	TXA
 	LDY #0
-print_bit:;***********
-	asl				; get top bit into carry flag
-	tax				; save the current value
-	lda #'0'|$80
-	adc #0			; increment by one if we had a carry
-	sta $0759,Y		; print bit to screen
-	txa
-	iny
-	cpy #8
-	bne print_bit	; repeat 8 times
+print_bit:
+		ASL					; get top bit into carry flag
+		TAX					; save the current value
+		LDA #'0'|$80
+		ADC #0				; increment by one if we had a carry
+		STA $0759,Y			; print bit to screen***********
+		TXA
+		INY
+		CPY #8
+		BNE print_bit		; repeat 8 times
 
 ; find the bit to beep out
 	TSX						; get the bad bit mask back into A
@@ -342,44 +340,45 @@ print_bit:;***********
 page_chkbit:	
 		LSR					; move lowest bit into carry
 	BCS start_beeping		; bit set, display it
-		inx					; count down
-		cpx #$09
-		bne page_chkbit		; test next bit
+		INX					; count down
+		CPX #$09
+		BNE page_chkbit		; test next bit
 	JMP *					; only get here if there was no bad bit
 
 ; now X contains the index of the bit, starting at 1
 start_beeping:
-	txs					; save the bit index of the top set bit into SP
+	TXS						; save the bit index of the top set bit into SP
 beeploop:
-	ldx #5
-type_beep:				; beep an annoying chirp to indicate page err
-	inline_delay_cycles_ay 30000
-	txa
-	inline_beep_xy $40, $40
-	tax
-	dex
-	bne type_beep
-
-	tsx					; fetch the bit number
-	txa
-	cmp #$FF
-	beq beeploop		; continuous beeping for MB error
+		LDX #5
+type_beep:					; beep an annoying chirp to indicate page err
+			DELAY(105000)
+			TXA
+			BEEP($40,$40)
+			TAX
+			DEX
+			BNE type_beep
+	
+		TSX					; fetch the bit number
+		TXA
+		CMP #$FF
+		BEQ beeploop		; continuous beeping for MB error
 bit_beep:
-	tax
-	inline_delay_cycles_ay 400000
-	txa
-	sta TXTCLR 			; turn on graphics
-	inline_beep_xy $FF, $80
-	sta TXTSET			; text mode
-	sec
-	sbc #1
-	bne bit_beep
+		TAX
+		DELAY(140000)
+		TXA
+		sta TXTCLR 			; ****turn on graphics
+		BEEP($FF,$80)
+		sta TXTSET			; ****text mode
+		SEC
+		SBC #1
+		BNE bit_beep
 
-	; pause betwen beeping ~1.5 sec
-	ldx #3
-dl:	inline_delay_cycles_ay 500000
-	dex
-	bne dl
+; pause betwen beeping ~1.5 sec
+	LDX #10
+dl:
+		DELAY(525000)
+		DEX
+		BNE dl
 
 	JMP beeploop
 .)
