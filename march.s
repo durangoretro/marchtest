@@ -1,15 +1,16 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250630-1748
+; last modified 20250630-1750
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
 
 ; *** macros ***
-#define	BEEP(l,p)	LDX#(l):LDY#(p):DEY:NOP:NOP:BNE *-3:DEX:STX$DFB0:BNE *-11
+#define	BEEP(l,p)	LDX#l:LDY#p:DEY:NOP:NOP:BNE *-3:DEX:STX$DFB0:BNE *-11
 #define DELAY(c)	LDA#>(c/9):LDY#<(c/9):CPY#1:DEY:SBC#0:BCS *-5
 #define PRINT(m,d)	LDY#0:LDA m,Y:BEQ *+32:ASL:ASL:TAX:LDA font,X:STA d,Y:LDA font+1,X:STA d+32,Y:LDA font+2,X:STA d+64,Y:LDA font+3,X:STA d+96,Y:INY:BNE *-33
+#define CHAR(d)		ASL:ASL:TAY:LDA font,Y:STA d:LDA font+1,Y:STA d+32:LDA font+2,Y:STA d+64:LDA font+3,Y:STA d+96
 
 ; *** hardware definitions ***
 
@@ -203,7 +204,8 @@ zp_error:
 	TAX						; bat bit mask is in A, save it to X
 	TXS  					; then save it in the SP
 
-; *** display some message ***
+	PRINT(bad_msg,$7040)
+ 
 	TSX						; retrieve the test value
 	TXA
 	LDY #0
