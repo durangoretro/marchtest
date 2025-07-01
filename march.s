@@ -1,7 +1,7 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250630-2305
+; last modified 20250701-1228
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
@@ -19,12 +19,15 @@ IO8mode	=	$DF80
 IOAie	=	$DFA0
 IOBeep	=	$DFB0
 
+; *** memory usage ***
+ptr		=	$03				; temporary pointer, 6510 & minimOS-savvy
 
 #ifdef	POCKET
 * = $0800					; standard pocket address
 #else
 * = $E000					; 8K should be more than enough
 #endif
+
 ; ***********************
 ; *** standard header ***
 ; ***********************
@@ -68,19 +71,25 @@ reset:
 	SEI						; usual 6502 stuff
 	CLD
 	LDX #$FF
-;	TXS
+	TXS						; is this needed?
 ; Durango specific stuff
 	STX IOAie				; turn error LED off
 	LDA #%10110000			; HIRES mode as usual
 	STA IO8mode
-; make a clear strip for pres-test progress
+; some beep
+	BEEP($20,$C0)
+; make a clear strip for pre-test progress
 	LDX #0					; not using STZ
 	TXA
 clear:
+		STA $6F00, X
 		STA $7000, X		; about middle of the screen
 		INX
 		BNE clear			; 256 bytes are 8 rasters on HIRES mode
-; at this point we don't trust stack or ZP, test these first
+; ******************************************************************
+; *** at this point we don't trust stack or ZP, test these first ***
+; ******************************************************************
+	PRINT(zp_msg,$6F4B)
 start:	
 	LDX #(tst_tbl_end-tst_tbl-1)	; initialize the pointer to the table of values
 
@@ -89,6 +98,13 @@ marchU:
 		LDA tst_tbl,X		; get the test value into A
 		TXS					; save the index of the test value into SP
 		TAX					; save the test value into X
+
+		LDY #31				; write value pattern on some line
+mul:
+			STA $6FE0, Y
+			DEY
+			BPL mul
+
 		LDY #$00
 marchU0:
 			STA $00,Y		; w0 - write the test value
@@ -371,7 +387,7 @@ wr:
 .)
 page_error:
 .(
-	; TAX					; bat bit mask is in A, save it to X
+	; TAX					; bad bit mask is in A, save it to X
 	TXS  					; then save it in the SP
 
 	PRINT(bad_page_msg,$7040)
@@ -476,7 +492,9 @@ type_beep:					; beep an annoying chirp to indicate page err
 		BEQ beeploop		; continuous beeping for MB error
 bit_beep:
 		TAX
-		DELAY(140000)
+		DELAY(466667)
+		DELAY(466667)
+		DELAY(466667)		; 4-second delay
 		TXA
 ;		sta TXTCLR 			; ****turn on graphics
 		BEEP($FF,$80)
@@ -497,6 +515,45 @@ dl:
 
 page_ok:
 
+; *************************************************
+; *** now we trust the zero page and stack page ***
+; *************************************************
+	LDX #$FF
+	TXS				; initialize the stack pointer
+;	JSR count_ram	; count how much RAM is installed -- all Durangos have 32 KiB
+	JSR show_banner
+	PRINT(zp_ok,$7EE6)
+ 
+;	JSR show_charset
+
+; *************************
+; *** standard routines ***
+; *************************
+; clear screen (within working ZP)
+con_cls:
+.(
+	LDX #$60				; screen 3 page address
+	LDY #0
+	TYA						; will clear screen
+	STY ptr					; pointer LSB
+p_loop:
+		STX ptr+1			; update pointer MSB
+c_loop:
+			STA (ptr), Y
+			INY
+			BNE c_loop
+		INX
+		BPL p_loop			; just up to $8000
+	RTS
+.)
+
+; display banner
+show_banner:
+.(
+	JSR con_cls
+	RTS
+.)
+
 ; ************
 ; *** data ***
 ; ************
@@ -510,6 +567,10 @@ bad_msg:
 bad_msg_len = * - bad_msg
 bad_page_msg:
 	.asc	"PAGE ERR", 0
+zp_msg:
+	.asc	"TEST ZERO PAGE", 0
+zp_ok:
+	.asc	"ZERO/STACK PAGES OK", 0
 
 ; *** 8x4 font (ASCII 32-95) for quick inline display ***
 ; notice MOD 64!
@@ -530,3 +591,27 @@ font:
 	.byt	8, 24, 56, 8,		60, 32, 28, 56,		28, 32, 62, 28,		60, 8, 16, 32	; 4567
 	.byt	24, 36, 24, 60,		24, 60, 4, 56,		0, 8, 0, 8,			8, 0, 8, 16 	; 89:;
 	.byt	0, 8, 16, 8,		0, 60, 0, 60,		0, 16, 8, 16,		24, 36, 8, 8	; <=>?
+
+#ifndef	POCKET
+; ***************************
+; *** ROM padding and end ***
+; ***************************
+	.dsb	$FFD6-*, $FF	; ROM fill
+; standard ROM tail
+	.asc	"DmOS"			; minimOS-compliant signature
+; interrupt handlers fit here
+irq_hndl:
+	JMP (irq_ptr)			; standard IRQ handler @ $FFDA
+nmi_hndl:
+	JMP (nmi_ptr)			; standard NMI handler @ $FFDD
+	.byt	$FF				; some padding
+switch:
+	JMP ($FFFC)				; devCart switching support $FFE1
+
+	.dsb	$FFFA-*, $FF	; ROM fill, not using checksum
+; 6502 hardware vectors
+	.word	nmi_hndl		; NMI as warm reset
+	.word	reset
+	.word	irq_hndl
+#endif
+file_end:					; should be $10000 for ROM images
