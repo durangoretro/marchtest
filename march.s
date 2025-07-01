@@ -1,7 +1,7 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250701-1228
+; last modified 20250701-1802
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
@@ -20,7 +20,21 @@ IOAie	=	$DFA0
 IOBeep	=	$DFB0
 
 ; *** memory usage ***
-ptr		=	$03				; temporary pointer, 6510 & minimOS-savvy
+mu_ptr	=	$03				; temporary pointer, 6510 & minimOS-savvy
+count	=	mu_ptr+1		; AKA mu_ptr_hi
+mu_page_end	= count+1
+mu_page_st	= mu_page_end+1
+mu_page_idx	= mu_page_st+1
+mu_ysave	= mu_page_idx+1
+all_errs	= mu_ysave+1
+scratch		= all_errs+1
+results		= scratch+1
+con_loc		= results+128	; 32*4, as this has no more than 32KiB
+con_str		= con_loc+2
+con_xsave	= con_str+2
+con_ysave	= con_xsave+1
+con_asave	= con_ysave+1
+_end_zp		= con_asave+1
 
 #ifdef	POCKET
 * = $0800					; standard pocket address
@@ -520,9 +534,9 @@ page_ok:
 ; *************************************************
 	LDX #$FF
 	TXS				; initialize the stack pointer
-;	JSR count_ram	; count how much RAM is installed -- all Durangos have 32 KiB
+	JSR count_ram	; count how much RAM is installed -- all Durangos have 32 KiB, but check for POCKET version
 	JSR show_banner
-	PRINT(zp_ok,$7EE6)
+	PRINT(zp_ok,$7B46)
  
 ;	JSR show_charset
 
@@ -547,10 +561,70 @@ c_loop:
 	RTS
 .)
 
+; display A in hex at current position
+con_put_hex:
+	STA con_asave
+	LSR						; shift high nybble into low
+	LSR
+	LSR
+	LSR
+	TAY						; use as index
+	LDA hex_tbl, Y			; into the hex table
+	JSR con_display			; show char in A at current poition
+	LDA con_asave			; get another copy
+	AND #$0F				; get low nybble
+	TAY						; as index
+	LDA hex_tbl, Y			; into table
+	INC con_loc				; advance to next position (supposedly no wrap expected)
+;	JMP con_display			; call and return
+.)
+; display char in A at current position *** new
+con_display:
+.(
+	ASL
+	ASL						; inject ASCII into 64-char font
+ 	ORA #3					; go for bottom raster first!
+	TAX						; as index into 8x4 font
+	LDY #96					; bottom raster offset
+con_dloop:
+ 		LDA font, X			; get font data
+		STA (con_loc), Y	; store on screen
+		DEX
+		TYA
+		SEC
+		SBC #32				; one raster up
+		TAY
+		BPL con_dloop
+	RTS
+.)
+
 ; display banner
 show_banner:
 .(
 	JSR con_cls
+	PRINT(ban1txt,$7D46)
+	PRINT(ban2txt,$7E40)
+	PRINT(ban3txt,$7F44)
+	LDX #$7F
+	LDY #$51				; position of start page on display
+	STY con_loc
+	STX con_loc+1
+	LDA mu_page_st			; no need to subtract from start page
+	JSR con_put_hex
+	RTS
+.)
+
+; count useable RAM
+count_ram:
+.(
+#ifdef	POCKET
+	LDA #$10				; pocket might start somewhat before this...
+#else
+	LDA #$02
+#endif
+	STA mu_page_st			; start page
+	LDA #$80				; standard RAM end, might change for ShadowRAM
+	STA mu_page_end
 	RTS
 .)
 
@@ -560,7 +634,8 @@ show_banner:
 tst_tbl:
 	.byt	$80,$40,$20,$10, $08,$04,$02,$01,$00,$FF,$A5,$5A 
 tst_tbl_end:
-
+hex_tbl:
+	.asc	"0123456789ABCDEF"
 ; *** bad ZP/SP and other messages ***
 bad_msg:
 	.asc	"ZP/SP ERR", 0
@@ -571,7 +646,12 @@ zp_msg:
 	.asc	"TEST ZERO PAGE", 0
 zp_ok:
 	.asc	"ZERO/STACK PAGES OK", 0
-
+ban1txt:
+	.asc	"DURANGO-X DEAD TEST", 0
+ban2txt:
+	.asc	"BY ZUIKO21, KI3V & ADRIAN BLACK", 0
+ban3txt:
+	.asc	"TESTING RAM $0200-$7FFF", 0
 ; *** 8x4 font (ASCII 32-95) for quick inline display ***
 ; notice MOD 64!
 font:
