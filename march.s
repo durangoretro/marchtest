@@ -1,7 +1,7 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250701-1802
+; last modified 20250701-1804
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
@@ -35,6 +35,8 @@ con_xsave	= con_str+2
 con_ysave	= con_xsave+1
 con_asave	= con_ysave+1
 _end_zp		= con_asave+1
+irq_ptr		= $0200
+nmi_ptr		= $0202
 
 #ifdef	POCKET
 * = $0800					; standard pocket address
@@ -549,11 +551,11 @@ con_cls:
 	LDX #$60				; screen 3 page address
 	LDY #0
 	TYA						; will clear screen
-	STY ptr					; pointer LSB
+	STY mu_ptr					; pointer LSB
 p_loop:
-		STX ptr+1			; update pointer MSB
+		STX mu_ptr+1			; update pointer MSB
 c_loop:
-			STA (ptr), Y
+			STA (mu_ptr), Y
 			INY
 			BNE c_loop
 		INX
@@ -563,6 +565,7 @@ c_loop:
 
 ; display A in hex at current position
 con_put_hex:
+.(
 	STA con_asave
 	LSR						; shift high nybble into low
 	LSR
