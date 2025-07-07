@@ -1,7 +1,7 @@
 ; march-U test for ShadowRAM in Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250707-2029
+; last modified 20250707-2041
 
 ; xa shadow_m.s
 ; add -DPOCKET for non-cartridge version
@@ -108,6 +108,7 @@ reset:
 #ifndef	POCKET
 ; ROM code must be copied and executed from standard RAM
 .(
+pay_hi	= >pay_end
 	LDX #>dest_exe
 	LDY #<dest_exe			; code will run at dest_exe ($0800), Y must be zero
 	STY con_str
@@ -124,7 +125,7 @@ loop:
 			BNE loop
 		INC con_str+1		; next page
 		INX					; on both indexes
-		CPX #(>pay_end)+1	; check whether last page is over
+		CPX #pay_hi+1		; check whether last page is over
 		BNE page			; copying a few extra bytes won't matter
 	JMP dest_exe			; *** launch rest of code from RAM ***
 .)
@@ -136,7 +137,6 @@ start:						; payload starts here
 ; *******************************************************************************
 	JSR show_banner			; init screen
 ; *** switch into ShadowRAM, ROM is no longer needed
-switch:
 	LDA #%01111100			; ROM disabled, protected RAM, and SD disabled just in case
 	STA IOCart
 
