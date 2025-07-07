@@ -1,7 +1,7 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250707-1415
+; last modified 20250707-1418
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
@@ -320,10 +320,11 @@ print_bit:
 	LDX #1					; count up
 chkbit:	
 		LSR					; move lowest bit into carry
-	BCS _beeping		; bit set, display it
+	BCS start_beeping		; bit set, display it
 		INX					; count down
 		CPX #$09
 		BNE chkbit			; test next bit
+	LDA #0:STA IOAie		; *** turn LED on as error display (NMOS-savvy)
 	JMP *					; only get here if there was no bad bit
 
 ; now X contains the index of the bit, ing at 1
