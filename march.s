@@ -1,7 +1,7 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250701-1804
+; last modified 20250707-1243
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
@@ -21,7 +21,7 @@ IOBeep	=	$DFB0
 
 ; *** memory usage ***
 mu_ptr	=	$03				; temporary pointer, 6510 & minimOS-savvy
-count	=	mu_ptr+1		; AKA mu_ptr_hi
+count	=	mu_ptr+1		; AKA mu_ptr+1
 mu_page_end	= count+1
 mu_page_st	= mu_page_end+1
 mu_page_idx	= mu_page_st+1
@@ -535,16 +535,275 @@ page_ok:
 ; *** now we trust the zero page and stack page ***
 ; *************************************************
 	LDX #$FF
-	TXS				; initialize the stack pointer
-	JSR count_ram	; count how much RAM is installed -- all Durangos have 32 KiB, but check for POCKET version
+	TXS						; initialize the stack pointer
+; *** Durango-X specifics, init vectored iterrupts, just in case ***
+	LDX #>reset
+	LDY #<reset
+	STY nmi_ptr				; NMI button will reset the test, not the bootloader
+	STX nmi_ptr+1
+	LDX #>null
+	LDY #<null
+	STY irq_ptr				; IRQ will do nothing, for extra safety
+	STX irq_ptr+1
+; *** continue with complete test ***
+	JSR count_ram			; count how much RAM is installed -- all Durangos have 32 KiB, but check for POCKET version
 	JSR show_banner
 	PRINT(zp_ok,$7B46)
- 
+
 ;	JSR show_charset
 
+	LDX #$40				; cycles
+	LDA #$80				; period
+	JSR beep
+	LDX #$80				; cycles
+	LDA #$40				; period
+	JSR beep
+
+	LDA #5
+	JSR delay_seconds
+
+	JSR init_results
+test_ram:
+	JSR marchU				; run the test on RAM and report
+	JMP test_ram			; ...forever!
+
 ; *************************
-; *** standard routines ***
+; *** business routines ***
 ; *************************
+; count useable RAM
+count_ram:
+.(
+#ifdef	POCKET
+	LDA #$10				; pocket might start somewhat before this...
+#else
+	LDA #$02
+#endif
+	STA mu_page_st			; start page
+	LDA #$80				; standard RAM end, might change for ShadowRAM
+	STA mu_page_end
+	RTS
+.)
+
+; clear results array
+init_results:
+.(
+	LDA #0
+	STA all_errs
+	TAY
+lp:
+		STA results,Y
+		INY
+		BPL lp				; not BNE!
+	RTS
+.)
+
+; full test!
+marchU:
+.(
+;	sta TXTCLR			; use graphics
+;	sta HIRES 			; set high res
+;	sta MIXSET			; mixed mode on
+
+;	LDA #FIRST_PAGE			; set starting address (maybe change later to a parameter?)
+;	STA mu_page_st			; *** already done by count_ram ***
+
+	LDA #(tst_tbl_end-tst_tbl-1) ; number of test values
+	STA mu_test_idx
+
+init:	
+		LDA #0				; low bits 0 so we test a hardware page at a time
+		STA mu_ptr
+		LDY #$00			; Y will be the pointer into the page
+		LDX mu_test_idx		; get the index to the test value pages
+		LDA tst_tbl,X		; get the test value into A
+		TAX					; X will contain the test val throughout marchU
+		LDA mu_page_st
+		STA mu_ptr+1
+	
+		; lda #08
+		; sta results+$19
+		; lda #01
+		; sta results+$A1
+		; sta all_errs
+		; jmp show_report	; simulate a run with canned errors
+	
+; In the descriptions below:
+;	up: 	perform the test from low addresses to high ones
+; 	down:	perform the test from high addresses to low ones
+;	r0:		read the current location, compare to the test value, fail if different
+;	r1:		read the current location, compare to the inverted test value, fail if different
+;	w0:		write the test value to current location
+;	w1:		write the inverted test value to current location
+	
+; step 0; up - w0 - write the test value
+step0:	
+			TXA				; get the test value
+			STA (mu_ptr),Y	; w0 - write the test value to current location
+			INY				; count up
+			BNE step0		; repeat until Y overflows back to zero (do the whole page)
+	
+		INC mu_ptr+1		; increment the page
+		LDA mu_ptr+1
+		CMP mu_page_end		; compare with (one page past) the last page
+		BNE step0			; if not there yet, loop again
+	
+;	LDA #$08				; simulate error
+;	JMP bad
+	
+; step 1; up - r0,w1,r1,w0
+		LDA mu_page_st		; set up the starting page again for next stage
+		STA mu_ptr+1
+step1:	
+			TXA				; get the test value
+			EOR (mu_ptr),Y	; r0 - read and compare with test value (by XOR'ing with accumulator)
+			; BNE bad			; if bits differ, location is bad
+		checkbad;***********************
+			TXA				; get the test value
+			EOR #$FF		; invert
+			STA (mu_ptr),Y	; w1 - write the inverted test value
+			EOR (mu_ptr),Y	; r1 - read the same value back and compare using XOR
+			; BNE bad			; if bits differ, location is bad
+		checkbad
+			TXA				; get the test value
+			STA (mu_ptr),Y	; w0 - write the test value to the memory location
+			INY				; count up
+			BNE step1		; repeat until Y overflows back to zero
+	
+		INC mu_ptr+1		; increment the page
+		LDA mu_ptr+1
+		CMP mu_page_end		; compare with (one page past) the last page
+			BNE step1		; if not there yet, loop again
+	
+; step 2; up - r0,w1
+		LDA mu_page_st	; set up the starting page again for next stage
+		STA mu_ptr+1
+step2:	
+			TXA				; get the test value
+			EOR (mu_ptr),Y	; r0 - read and compare with test value (by XOR'ing with accumulator)
+			; BNE bad			; if bits differ, location is bad
+			checkbad
+			TXA				; get the test value
+			EOR #$FF		; invert
+			STA (mu_ptr),Y	; w1 - write the inverted test value
+			INY				; count up
+			BNE step2		; repeat until Y overflows back to zero
+	
+		INC mu_ptr+1		; increment the page
+		LDA mu_ptr+1
+		CMP mu_page_end		; compare with (one page past) the last page
+			BNE step2		; if not there yet, loop again
+	
+; step 3; down - r1,w0,r0,w1
+		LDA mu_page_end
+		STA mu_ptr+1
+		DEC mu_ptr+1		; start at the end page minus one
+;		JMP continue3
+	
+	; bad: 
+	; 	LDY mu_ptr+1	; get the page number as index into results array
+	; 	ORA results,Y	; collect any bad bits
+	; 	STA results,Y	; store the accumulated errors back to the results array
+	; 	ORA all_errs	; also store one value that collects all of the bad bits found
+	; 	STA all_errs
+	; 	JMP next
+	
+continue3:
+		LDY #$FF			; start at FF and count down
+step3:	
+			TXA				; get the test value
+			EOR #$FF		; invert
+			EOR (mu_ptr),Y	; r1 - read and compare with inverted test value (by XOR'ing with accumulator)
+			; BNE bad			; if bits differ, location is bad
+			checkbad
+			TXA				; get the test value
+			STA (mu_ptr),Y	; w0 - write the test value
+			EOR (mu_ptr),Y	; r0 - read the same value back and compare using XOR
+			; BNE bad			; if bits differ, location is bad
+			checkbad
+			TXA				; get the test value
+			EOR #$FF		; invert
+			STA (mu_ptr),Y	; w1 - write the inverted test value
+			DEY				; determine if we are at offset zero
+			CPY #$FF		; did we wrap around?
+			BNE step3		; repeat until Y overflows back to FF
+	
+		DEC mu_ptr+1		; decrement the page
+		LDA mu_ptr+1
+		CMP mu_page_st		; compare with the first page, which can't be zero
+			BCS step3		; if not there yet (mu_ptr+1>=mu_page_st so carry set), loop again
+	
+; step 4; down - r1,w0
+		LDA mu_page_end
+		STA mu_ptr+1
+		DEC mu_ptr+1		; start at the end page minus one
+step4:	
+			TXA				; get the test value
+			EOR #$FF		; invert
+			EOR (mu_ptr),Y	; r1 - read and compare with inverted test value (by XOR'ing with accumulator)
+			; BNE bad			; if bits differ, location is bad
+			checkbad
+			TXA				; get the test value
+			STA (mu_ptr),Y	; w0 - write the test value
+			DEY				; determine if we are at offset zero
+			CPY #$FF		; did we wrap around?
+			BNE step4		; repeat until Y overflows back to FF	
+	next:
+		DEC mu_ptr+1		; decrement the page
+		LDA mu_ptr+1
+		CMP mu_page_st		; compare with the first page, which can't be zero
+			BCS step4		; if not there yet (mu_ptr+1>=mu_page_st so carry set), loop again
+	
+; now, determine whether to repeat with a new test value
+		LDX mu_test_idx
+		DEX
+		STX mu_test_idx
+	
+	BMI show_report			; we're done with all values, so show results
+	
+		JMP init			; else go to next test value
+.)
+
+; ************************
+; *** support routines ***
+; ************************
+; standard beep (A is period, X is cycles, destroys Y)
+beep:
+.(
+outer:
+		PHA
+		TAY
+inner:
+			NOP
+			NOP
+			NOP
+			DEY
+			BNE inner
+		STX IOBeep
+		PLA
+		DEX
+		BNE outer
+	STY IOBeep				; safer for Durango
+	RTS
+.)
+
+delay_seconds:
+.(
+;		sta KBDSTRB
+;	ASL						; double the number, since we actually count in half-seconds
+loop:
+		PHA
+		LDX #7
+repeat:
+			DELAY(500000)
+			DEX
+			BNE repeat
+		PLA
+		SEC
+		SBC #1
+		BNE loop
+	RTS
+.)
+
 ; clear screen (within working ZP)
 con_cls:
 .(
@@ -617,19 +876,9 @@ show_banner:
 	RTS
 .)
 
-; count useable RAM
-count_ram:
-.(
-#ifdef	POCKET
-	LDA #$10				; pocket might start somewhat before this...
-#else
-	LDA #$02
-#endif
-	STA mu_page_st			; start page
-	LDA #$80				; standard RAM end, might change for ShadowRAM
-	STA mu_page_end
-	RTS
-.)
+; *** Durango-X specific, just in case an IRQ is executed ***
+null:
+	RTI
 
 ; ************
 ; *** data ***
