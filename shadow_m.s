@@ -1,7 +1,7 @@
 ; march-U test for ShadowRAM in Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250707-2026
+; last modified 20250707-2029
 
 ; xa shadow_m.s
 ; add -DPOCKET for non-cartridge version
