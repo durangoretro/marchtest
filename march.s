@@ -1,7 +1,7 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250707-1418
+; last modified 20250707-1447
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
@@ -74,9 +74,9 @@ rom_start:
 ; NEW main commit (user field 1)
 	.asc	"$$$$$$$$"
 ; NEW coded version number
-	.word	$1041			; 1.0b1		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
+	.word	$1043			; 1.0b3		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
 ; date & time in MS-DOS format at byte 248 ($F8)
-	.word	$7100			; time, 14.08		0111 0-001 000-0 0000
+	.word	$7600			; time, 14.40		0111 0-110 000-0 0000
 	.word	$5AE7			; date, 2025/7/7	0101 101-0 111-0 0111
 ; filesize in top 32 bits (@ $FC) now including header ** must be EVEN number of pages because of 512-byte sectors
 	.word	file_end-rom_start			; actual executable size
@@ -765,6 +765,16 @@ markbad:
 ; display test results
 show_report:
 .(
+; *** Durango-X specifics, init vectored iterrupts, just in case ***
+	LDX #>reset
+	LDY #<reset
+	STY nmi_ptr				; NMI button will reset the test, not the bootloader
+	STX nmi_ptr+1
+	LDX #>null
+	LDY #<null
+	STY irq_ptr				; IRQ will do nothing, for extra safety
+	STX irq_ptr+1
+; ***
 ;	sta TXTSET 		; turn on text
 	JSR show_banner
 ;	puts_at 1,0, "GITHUB.COM/MISTERBLACK1/APPLEII_DEADTEST"
@@ -930,7 +940,9 @@ con_put_hex:
 	TAY						; as index
 	LDA hex_tbl, Y			; into table
 	INC con_loc				; advance to next position (supposedly no wrap expected)
-;	JMP dx_display			; call and return
+	JSR dx_display			; call, a bit less efficient
+	DEC con_loc				; *** needs to be this way for compatibility
+	RTS
 .)
 ; display char in A at current position *** new, destroys ALL registers
 dx_display:
