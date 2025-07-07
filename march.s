@@ -1,7 +1,7 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250707-1243
+; last modified 20250707-1405
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
@@ -13,6 +13,7 @@
 #define PRINT(m,d)	LDY#0:LDA m,Y:BEQ *+32:ASL:ASL:TAX:LDA font,X:STA d,Y:LDA font+1,X:STA d+32,Y:LDA font+2,X:STA d+64,Y:LDA font+3,X:STA d+96,Y:INY:BNE *-33
 #define CHAR(d)		ASL:ASL:TAX:LDA font,X:STA d:LDA font+1,X:STA d+32:LDA font+2,X:STA d+64:LDA font+3,X:STA d+96
 #define CHAR_Y(d)	ASL:ASL:TAX:LDA font,X:STA d,Y:LDA font+1,X:STA d+32,Y:LDA font+2,X:STA d+64,Y:LDA font+3,X:STA d+96,Y
+#define	CHECKBAD	BEQ *+5:JSR markbad
 
 ; *** hardware definitions ***
 IO8mode	=	$DF80
@@ -73,10 +74,10 @@ rom_start:
 ; NEW main commit (user field 1)
 	.asc	"$$$$$$$$"
 ; NEW coded version number
-	.word	$1001			; 1.0a1		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
+	.word	$1041			; 1.0b1		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
 ; date & time in MS-DOS format at byte 248 ($F8)
-	.word	$9400			; time, 18.32		1001 0-100 000-0 0000
-	.word	$5ADD			; date, 2025/6/29	0101 101-0 110-1 1101
+	.word	$7100			; time, 14.08		0111 0-001 000-0 0000
+	.word	$5AE7			; date, 2025/7/7	0101 101-0 111-0 0111
 ; filesize in top 32 bits (@ $FC) now including header ** must be EVEN number of pages because of 512-byte sectors
 	.word	file_end-rom_start			; actual executable size
 	.word	0							; 64K space does not use upper 16 bits, [255]=NUL may be third magic number
@@ -570,7 +571,7 @@ test_ram:
 ; *************************
 ; *** business routines ***
 ; *************************
-; count useable RAM
+; count useable RAM *** complete revamp for Durango-X
 count_ram:
 .(
 #ifdef	POCKET
@@ -593,7 +594,7 @@ init_results:
 lp:
 		STA results,Y
 		INY
-		BPL lp				; not BNE!
+		BPL lp				; *** not BNE!
 	RTS
 .)
 
@@ -656,14 +657,12 @@ step0:
 step1:	
 			TXA				; get the test value
 			EOR (mu_ptr),Y	; r0 - read and compare with test value (by XOR'ing with accumulator)
-			; BNE bad			; if bits differ, location is bad
-		checkbad;***********************
+			CHECKBAD
 			TXA				; get the test value
 			EOR #$FF		; invert
 			STA (mu_ptr),Y	; w1 - write the inverted test value
 			EOR (mu_ptr),Y	; r1 - read the same value back and compare using XOR
-			; BNE bad			; if bits differ, location is bad
-		checkbad
+			CHECKBAD
 			TXA				; get the test value
 			STA (mu_ptr),Y	; w0 - write the test value to the memory location
 			INY				; count up
@@ -680,8 +679,7 @@ step1:
 step2:	
 			TXA				; get the test value
 			EOR (mu_ptr),Y	; r0 - read and compare with test value (by XOR'ing with accumulator)
-			; BNE bad			; if bits differ, location is bad
-			checkbad
+			CHECKBAD
 			TXA				; get the test value
 			EOR #$FF		; invert
 			STA (mu_ptr),Y	; w1 - write the inverted test value
@@ -697,29 +695,18 @@ step2:
 		LDA mu_page_end
 		STA mu_ptr+1
 		DEC mu_ptr+1		; start at the end page minus one
-;		JMP continue3
-	
-	; bad: 
-	; 	LDY mu_ptr+1	; get the page number as index into results array
-	; 	ORA results,Y	; collect any bad bits
-	; 	STA results,Y	; store the accumulated errors back to the results array
-	; 	ORA all_errs	; also store one value that collects all of the bad bits found
-	; 	STA all_errs
-	; 	JMP next
-	
-continue3:
-		LDY #$FF			; start at FF and count down
+
+  		LDY #$FF			; start at FF and count down
 step3:	
 			TXA				; get the test value
 			EOR #$FF		; invert
 			EOR (mu_ptr),Y	; r1 - read and compare with inverted test value (by XOR'ing with accumulator)
-			; BNE bad			; if bits differ, location is bad
-			checkbad
+			CHECKBAD
 			TXA				; get the test value
 			STA (mu_ptr),Y	; w0 - write the test value
 			EOR (mu_ptr),Y	; r0 - read the same value back and compare using XOR
 			; BNE bad			; if bits differ, location is bad
-			checkbad
+			CHECKBAD
 			TXA				; get the test value
 			EOR #$FF		; invert
 			STA (mu_ptr),Y	; w1 - write the inverted test value
@@ -740,14 +727,12 @@ step4:
 			TXA				; get the test value
 			EOR #$FF		; invert
 			EOR (mu_ptr),Y	; r1 - read and compare with inverted test value (by XOR'ing with accumulator)
-			; BNE bad			; if bits differ, location is bad
-			checkbad
+			CHECKBAD
 			TXA				; get the test value
 			STA (mu_ptr),Y	; w0 - write the test value
 			DEY				; determine if we are at offset zero
 			CPY #$FF		; did we wrap around?
 			BNE step4		; repeat until Y overflows back to FF	
-	next:
 		DEC mu_ptr+1		; decrement the page
 		LDA mu_ptr+1
 		CMP mu_page_st		; compare with the first page, which can't be zero
@@ -763,6 +748,111 @@ step4:
 		JMP init			; else go to next test value
 .)
 
+; mark this page as faulty
+markbad:
+.(
+	STY mu_ysave
+	LDY mu_ptr+1			; get the page number as index into results array
+	ORA results,Y			; collect any bad bits
+	STA results,Y			; store the accumulated errors back to the results array
+	ORA all_errs			; also store one value that collects all of the bad bits found
+	STA all_errs
+	LDY mu_ysave
+	RTS
+.)
+
+; display test results
+show_report:
+.(
+;	sta TXTSET 		; turn on text
+	JSR show_banner
+;	puts_at 1,0, "GITHUB.COM/MISTERBLACK1/APPLEII_DEADTEST"
+	PRINT(page_head,$6240)
+
+	LDX #15
+next_head_line:
+		TXA					; go to the correct line
+		CLC
+		ADC #4				; start on this line
+		TAY
+		LDA #0
+		JSR con_goto
+		TXA
+		STX con_xsave		; *** hope this works!
+		JSR con_put_hex
+		LDA #'_'
+		JSR dx_display
+		INC con_loc
+		INC con_loc
+		LDA #':'
+  		JSR dx_display
+		LDX con_xsave		; *** must retrieve!
+		DEX
+		BPL next_head_line
+
+	LDX #0
+next_page:
+		TXA					; calculate the column
+		LSR					; get the high nybble
+		LSR
+		LSR
+		LSR
+		TAY					; get the column offset from table
+		LDA columns,Y
+		PHA					; save the column number on the stack
+		
+		LDY #2				; print the heading row
+		JSR con_goto
+		TXA
+		STX con_xsave		; *** hope this works!
+		JSR con_put_hex
+		INC con_loc
+		LDA #'_'
+		JSR dx_display
+	
+		LDX con_xsave		; *** must retrieve!
+		TXA					; calculate the line number on the screen
+		AND #$0F			; 16 lines of results
+		CLC
+		ADC #4				; offset by starting line
+		TAY					; put line into Y
+	
+		PLA					; retrieve column into A
+		JSR con_goto		; move to that location on screen
+	
+		LDA results,X		; get the value to print
+		STX con_xsave		; *** hope this works!
+		BNE	hex				; see if there's an error
+			LDA #'-'		; if not, print dashes
+			JSR dx_display
+			INC con_loc
+			LDA #'-'
+			JSR dx_display	; put two dashes there
+		JMP next
+	
+hex:						; print a hex value
+		JSR con_put_hex
+	
+next:
+		LDX con_xsave		; *** must retrieve!
+		INX					; look for the next page
+		TXA					; compare to the last page to test
+		CMP mu_page_end
+		BNE next_page		; continue if there are more to print
+
+	LDA all_errs
+		BEQ good
+	JSR beep_bad
+	JMP done
+good:
+		JSR beep_good
+
+done:
+	LDA #8
+	JSR delay_seconds
+	JMP marchU
+.)
+
 ; ************************
 ; *** support routines ***
 ; ************************
@@ -773,9 +863,9 @@ outer:
 		PHA
 		TAY
 inner:
-			NOP
-			NOP
-			NOP
+			JSR delay
+			JSR delay
+			JSR delay
 			DEY
 			BNE inner
 		STX IOBeep
@@ -783,6 +873,7 @@ inner:
 		DEX
 		BNE outer
 	STY IOBeep				; safer for Durango
+delay:
 	RTS
 .)
 
@@ -804,15 +895,15 @@ repeat:
 	RTS
 .)
 
-; clear screen (within working ZP)
+; clear screen (within working ZP) *** revamped for Durango-X
 con_cls:
 .(
 	LDX #$60				; screen 3 page address
 	LDY #0
 	TYA						; will clear screen
-	STY mu_ptr					; pointer LSB
+	STY mu_ptr				; pointer LSB
 p_loop:
-		STX mu_ptr+1			; update pointer MSB
+		STX mu_ptr+1		; update pointer MSB
 c_loop:
 			STA (mu_ptr), Y
 			INY
@@ -822,7 +913,7 @@ c_loop:
 	RTS
 .)
 
-; display A in hex at current position
+; display A in hex at current position, destroys ALL registers
 con_put_hex:
 .(
 	STA con_asave
@@ -832,16 +923,16 @@ con_put_hex:
 	LSR
 	TAY						; use as index
 	LDA hex_tbl, Y			; into the hex table
-	JSR con_display			; show char in A at current poition
+	JSR dx_display			; show char in A at current poition
 	LDA con_asave			; get another copy
 	AND #$0F				; get low nybble
 	TAY						; as index
 	LDA hex_tbl, Y			; into table
 	INC con_loc				; advance to next position (supposedly no wrap expected)
-;	JMP con_display			; call and return
+;	JMP dx_display			; call and return
 .)
-; display char in A at current position *** new
-con_display:
+; display char in A at current position *** new, destroys ALL registers
+dx_display:
 .(
 	ASL
 	ASL						; inject ASCII into 64-char font
@@ -857,6 +948,19 @@ con_dloop:
 		SBC #32				; one raster up
 		TAY
 		BPL con_dloop
+	RTS
+.)
+
+; set con_loc from A=column, Y=row, doesn't touch X *** revamped for Durango-X
+con_goto:
+.(
+	CLC
+	ADC #$40				; raster offset
+	STA con_loc				; LSB is ready
+	TYA						; this is row
+	CLC
+	ADC #$60				; screen 3 base
+	STA con_loc+1			; MSB is ready, and we're done!
 	RTS
 .)
 
@@ -876,6 +980,36 @@ show_banner:
 	RTS
 .)
 
+; tune when error
+beep_bad:
+.(
+	LDX #$20				; cycles
+	LDA #$80				; period
+	JSR beep
+	LDX #$FF				; cycles
+	LDA #$FF				; period
+	JSR beep
+	LDX #$FF				; cycles
+	LDA #$FF				; period
+	JSR beep
+	RTS
+.)
+
+; tune when OK
+beep_good:
+.(
+	LDX #$20				; cycles
+	LDA #$80				; period
+	JSR beep
+	LDX #$40				; cycles
+	LDA #$40				; period
+	JSR beep
+	LDX #$00				; cycles
+	LDA #$20				; period
+	JSR beep
+	RTS
+.)
+
 ; *** Durango-X specific, just in case an IRQ is executed ***
 null:
 	RTI
@@ -888,6 +1022,9 @@ tst_tbl:
 tst_tbl_end:
 hex_tbl:
 	.asc	"0123456789ABCDEF"
+columns:
+	.byt	5, 8, 11, 14, 17, 20, 23, 26
+
 ; *** bad ZP/SP and other messages ***
 bad_msg:
 	.asc	"ZP/SP ERR", 0
@@ -904,6 +1041,9 @@ ban2txt:
 	.asc	"BY ZUIKO21, KI3V & ADRIAN BLACK", 0
 ban3txt:
 	.asc	"TESTING RAM $0200-$7FFF", 0
+page_head:
+	.asc	"PAGE", 0
+
 ; *** 8x4 font (ASCII 32-95) for quick inline display ***
 ; notice MOD 64!
 font:
