@@ -127,6 +127,7 @@ loop:
 		CPX #(>pay_end)+1	; check whether last page is over
 		BNE page			; copying a few extra bytes won't matter
 	JMP dest_exe			; *** launch rest of code from RAM ***
+.)
 start:						; payload starts here
 * =		dest_exe			; now into RAM addressing space
 #endif
