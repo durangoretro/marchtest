@@ -1,7 +1,7 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250707-1405
+; last modified 20250707-1415
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
@@ -25,8 +25,8 @@ mu_ptr	=	$03				; temporary pointer, 6510 & minimOS-savvy
 count	=	mu_ptr+1		; AKA mu_ptr+1
 mu_page_end	= count+1
 mu_page_st	= mu_page_end+1
-mu_page_idx	= mu_page_st+1
-mu_ysave	= mu_page_idx+1
+mu_test_idx	= mu_page_st+1
+mu_ysave	= mu_test_idx+1
 all_errs	= mu_ysave+1
 scratch		= all_errs+1
 results		= scratch+1
@@ -107,6 +107,7 @@ clear:
 ; *** at this point we don't trust stack or ZP, test these first ***
 ; ******************************************************************
 	PRINT(zp_msg,$6F4B)
+.(
 start:	
 	LDX #(tst_tbl_end-tst_tbl-1)	; initialize the pointer to the table of values
 
@@ -231,13 +232,13 @@ marchU4:
 		TSX					; recover the test value index from SP
 		DEX					; choose the next one
 		CPX #$FF			; see if we've wrapped
-		BNE marchup			; start again with next value
+		BNE marchup			;  again with next value
 
 	JMP zp_good				; *** ZP/stack test ended ***
 
 marchup:
 		JMP marchU			; because of distance...
-
+.)
 zp_error:
 .(
 	TAX						; bat bit mask is in A, save it to X
@@ -319,13 +320,13 @@ print_bit:
 	LDX #1					; count up
 chkbit:	
 		LSR					; move lowest bit into carry
-	BCS start_beeping		; bit set, display it
+	BCS _beeping		; bit set, display it
 		INX					; count down
 		CPX #$09
 		BNE chkbit			; test next bit
 	JMP *					; only get here if there was no bad bit
 
-; now X contains the index of the bit, starting at 1
+; now X contains the index of the bit, ing at 1
 start_beeping:
 	TXS						; save the bit index of the top set bit into SP
 beeploop:
@@ -361,7 +362,6 @@ dl:
 .)
 
 zp_good:
-; *** some proc section, I hope it's OK ***
 .(
 page_test:
 		; ldx #$F0			; simulate error
@@ -629,12 +629,12 @@ init:
 		; jmp show_report	; simulate a run with canned errors
 	
 ; In the descriptions below:
-;	up: 	perform the test from low addresses to high ones
-; 	down:	perform the test from high addresses to low ones
-;	r0:		read the current location, compare to the test value, fail if different
-;	r1:		read the current location, compare to the inverted test value, fail if different
-;	w0:		write the test value to current location
-;	w1:		write the inverted test value to current location
+;	up 		perform the test from low addresses to high ones
+; 	down	perform the test from high addresses to low ones
+;	r0		read the current location, compare to the test value, fail if different
+;	r1		read the current location, compare to the inverted test value, fail if different
+;	w0		write the test value to current location
+;	w1		write the inverted test value to current location
 	
 ; step 0; up - w0 - write the test value
 step0:	
