@@ -1,7 +1,7 @@
 ; march-U test for ShadowRAM in Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250708-1242
+; last modified 20250708-1248
 
 ; xa shadow_m.s
 ; add -DPOCKET for non-cartridge version
@@ -74,7 +74,7 @@ rom_start:
 ; NEW main commit (user field 1)
 	.asc	"$$$$$$$$"
 ; NEW coded version number
-	.word	$1044			; 1.0b4		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
+	.word	$1045			; 1.0b5		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
 ; date & time in MS-DOS format at byte 248 ($F8)
 	.word	$6600			; time, 12.48		0110 0-110 000-0 0000
 	.word	$5AE8			; date, 2025/7/8	0101 101-0 111-0 1000
@@ -356,11 +356,13 @@ step0:
 			TXA				; get the test value
 			STA (mu_ptr),Y	; w0 - write the test value to current location
 			INY				; count up
-			BNE step0		; repeat until Y overflows back to zero (do the whole page)
-	
-		INC mu_ptr+1		; increment the page *** up to zero
-;		LDA mu_ptr+1
-;		CMP mu_page_end		; compare with (one page past) the last page
+			BNE step0		; repeat until Y overflows back to zero (do the whole page)	
+skip0:
+  		INC mu_ptr+1		; increment the page *** up to zero
+		LDA mu_ptr+1
+		CMP #$DF			; EEEEEEEEEEEEK
+			BEQ skip0
+		CMP mu_page_end		; compare with (one page past) the last page
 		BNE step0			; if not there yet, loop again
 	
 ;	LDA #$08				; simulate error
@@ -382,10 +384,12 @@ step1:
 			STA (mu_ptr),Y	; w0 - write the test value to the memory location
 			INY				; count up
 			BNE step1		; repeat until Y overflows back to zero
-	
+skip1:	
 		INC mu_ptr+1		; increment the page *** up to zero
-;		LDA mu_ptr+1
-;		CMP mu_page_end		; compare with (one page past) the last page
+		LDA mu_ptr+1
+		CMP #$DF			; EEEEEEEEEEEEK
+			BEQ skip1
+		CMP mu_page_end		; compare with (one page past) the last page
 			BNE step1		; if not there yet, loop again
 	
 ; step 2; up - r0,w1
@@ -400,10 +404,12 @@ step2:
 			STA (mu_ptr),Y	; w1 - write the inverted test value
 			INY				; count up
 			BNE step2		; repeat until Y overflows back to zero
-	
+skip2:	
 		INC mu_ptr+1		; increment the page *** up to zero
-;		LDA mu_ptr+1
-;		CMP mu_page_end		; compare with (one page past) the last page
+		LDA mu_ptr+1
+		CMP #$DF			; EEEEEEEEEEEEK
+			BEQ skip2
+		CMP mu_page_end		; compare with (one page past) the last page
 			BNE step2		; if not there yet, loop again
 	
 ; step 3; down - r1,w0,r0,w1
@@ -428,10 +434,12 @@ step3:
 			DEY				; determine if we are at offset zero
 			CPY #$FF		; did we wrap around?
 			BNE step3		; repeat until Y overflows back to FF
-	
+skip3:	
 		DEC mu_ptr+1		; decrement the page
 		LDA mu_ptr+1
-		CMP mu_page_st		; compare with the first page, which can't be zero
+		CMP #$DF			; EEEEEEEEEEEEK
+			BEQ skip3
+  		CMP mu_page_st		; compare with the first page, which can't be zero
 			BCS step3		; if not there yet (mu_ptr+1>=mu_page_st so carry set), loop again
 	
 ; step 4; down - r1,w0
@@ -448,8 +456,11 @@ step4:
 			DEY				; determine if we are at offset zero
 			CPY #$FF		; did we wrap around?
 			BNE step4		; repeat until Y overflows back to FF	
+skip4:
 		DEC mu_ptr+1		; decrement the page
 		LDA mu_ptr+1
+		CMP #$DF			; EEEEEEEEEEEEK
+			BEQ skip4
 		CMP mu_page_st		; compare with the first page, which can't be zero
 			BCS step4		; if not there yet (mu_ptr+1>=mu_page_st so carry set), loop again
 	
