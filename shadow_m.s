@@ -1,17 +1,15 @@
 ; march-U test for ShadowRAM in Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250707-2041
+; last modified 20250708-1123
 
 ; xa shadow_m.s
 ; add -DPOCKET for non-cartridge version
-; add -DSAFE to make sure NOT to use stack EVER
 
 ; *** macros ***
 #define	BEEP(l,p)	LDX#l:LDY#p:DEY:NOP:NOP:BNE *-3:DEX:STX IOBeep:BNE *-11
 #define DELAY(c)	LDA#>(c/9):LDY#<(c/9):CPY#1:DEY:SBC#0:BCS *-5
 #define PRINT(m,d)	LDY#0:LDA m,Y:BEQ *+32:ASL:ASL:TAX:LDA font,X:STA d,Y:LDA font+1,X:STA d+32,Y:LDA font+2,X:STA d+64,Y:LDA font+3,X:STA d+96,Y:INY:BNE *-33
-#define CHAR(d)		ASL:ASL:TAX:LDA font,X:STA d:LDA font+1,X:STA d+32:LDA font+2,X:STA d+64:LDA font+3,X:STA d+96
 #define CHAR_Y(d)	ASL:ASL:TAX:LDA font,X:STA d,Y:LDA font+1,X:STA d+32,Y:LDA font+2,X:STA d+64,Y:LDA font+3,X:STA d+96,Y
 #define	CHECKBAD	BEQ *+5:JSR markbad
 
@@ -32,19 +30,19 @@ all_errs	= mu_ysave+1
 scratch		= all_errs+1
 results		= scratch+1
 con_loc		= results+128	; 32*4, as this has no more than 32KiB
-con_str		= con_loc+2
+con_str		= con_loc+2		; temporary pointer as well
 con_xsave	= con_str+2
 con_ysave	= con_xsave+1
 con_asave	= con_ysave+1
 _end_zp		= con_asave+1
 irq_ptr		= $0200
 nmi_ptr		= $0202
-dest_exe	= $0800			; destination address for ROM-to-RAM
 
 #ifdef	POCKET
 * = $0800					; standard pocket address
 #else
 * = $E000					; 8K should be more than enough
+dest_exe	= $0800			; destination address for ROM-to-RAM
 #endif
 
 ; ***********************
@@ -76,10 +74,10 @@ rom_start:
 ; NEW main commit (user field 1)
 	.asc	"$$$$$$$$"
 ; NEW coded version number
-	.word	$1001			; 1.0a1		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
+	.word	$1002			; 1.0a2		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
 ; date & time in MS-DOS format at byte 248 ($F8)
-	.word	$9A00			; time, 19.16		1001 1-010 000-0 0000
-	.word	$5AE7			; date, 2025/7/7	0101 101-0 111-0 0111
+	.word	$5C00			; time, 11.32		0101 1-100 000-0 0000
+	.word	$5AE8			; date, 2025/7/8	0101 101-0 111-0 1000
 ; filesize in top 32 bits (@ $FC) now including header ** must be EVEN number of pages because of 512-byte sectors
 	.word	file_end-rom_start			; actual executable size
 	.word	0							; 64K space does not use upper 16 bits, [255]=NUL may be third magic number
@@ -138,7 +136,7 @@ start:						; payload starts here
 	JSR show_banner			; init screen
 ; *** switch into ShadowRAM, ROM is no longer needed
 	LDA #%01111100			; ROM disabled, protected RAM, and SD disabled just in case
-	STA IOCart
+	STA IOCart				; switch into ShadowRAM!
 
  	JSR count_ram			; count how much ShadowRAM is installed -- usually 32 KiB
 
@@ -149,7 +147,7 @@ page_test:
 		; ldx #$F0			; simulate error
 		; jmp page_error
 
-	LDA #0					; write zero to zp location 0
+	LDA #0					; write zeros to first shadow page
 	TAY
 wz:
 		STA $8000,Y
@@ -184,13 +182,12 @@ wr:
 .)
 page_error:
 .(
-	; TAX					; bad bit mask is in A, save it to X
-	TXS  					; then save it in the SP
+	; TAX					; bad bit mask is in A, save it to X *** actually was in X
+	STX con_xsave			; then save it *** now we should have available RAM, don't mess with stack
 
 	PRINT(bad_page_msg,$7040)
 
-	TSX						; retrieve the test value
-	TXA
+	LDA con_xsave			; retrieve the test value *** now from RAM
 	LDY #0
 print_bit:
 		ASL					; get top bit into carry flag
@@ -204,8 +201,7 @@ print_bit:
 		BNE print_bit		; repeat 8 times
 
 ; find the bit to beep out
-	TSX						; get the bad bit mask back into A
-	TXA
+	LDA con_xsave			; get the bad bit mask back into A ***
 	CMP #$FF				; if it's FF, it's a motherboard error
 	BEQ start_beeping
 	LDX #1					; count up
@@ -219,7 +215,7 @@ page_chkbit:
 
 ; now X contains the index of the bit, starting at 1
 start_beeping:
-	TXS						; save the bit index of the top set bit into SP
+	STX con_xsave			; save the bit index of the top set bit ***
 beeploop:
 		LDX #5
 type_beep:					; beep an annoying chirp to indicate page err
@@ -230,8 +226,7 @@ type_beep:					; beep an annoying chirp to indicate page err
 			DEX
 			BNE type_beep
 	
-		TSX					; fetch the bit number
-		TXA
+		LDA con_xsave		; fetch the bit number ***
 		CMP #$FF
 		BEQ beeploop		; continuous beeping for MB error
 bit_beep:
@@ -354,7 +349,7 @@ step0:
 			INY				; count up
 			BNE step0		; repeat until Y overflows back to zero (do the whole page)
 	
-		INC mu_ptr+1		; increment the page
+		INC mu_ptr+1		; increment the page *** up to zero
 ;		LDA mu_ptr+1
 ;		CMP mu_page_end		; compare with (one page past) the last page
 		BNE step0			; if not there yet, loop again
@@ -379,7 +374,7 @@ step1:
 			INY				; count up
 			BNE step1		; repeat until Y overflows back to zero
 	
-		INC mu_ptr+1		; increment the page
+		INC mu_ptr+1		; increment the page *** up to zero
 ;		LDA mu_ptr+1
 ;		CMP mu_page_end		; compare with (one page past) the last page
 			BNE step1		; if not there yet, loop again
@@ -397,7 +392,7 @@ step2:
 			INY				; count up
 			BNE step2		; repeat until Y overflows back to zero
 	
-		INC mu_ptr+1		; increment the page
+		INC mu_ptr+1		; increment the page *** up to zero
 ;		LDA mu_ptr+1
 ;		CMP mu_page_end		; compare with (one page past) the last page
 			BNE step2		; if not there yet, loop again
@@ -463,7 +458,11 @@ step4:
 markbad:
 .(
 	STY mu_ysave
-	LDY mu_ptr+1			; get the page number as index into results array
+	STA con_asave			; *** needs to remove A15 from address
+	LDA mu_ptr+1			; get the page number as index into results array ***
+	AND #$7F				; *** remove topmost bit from index
+	TAY
+	LDA con_asave			; *** retrieve A, using Y as index
 	ORA results,Y			; collect any bad bits
 	STA results,Y			; store the accumulated errors back to the results array
 	ORA all_errs			; also store one value that collects all of the bad bits found
@@ -475,16 +474,6 @@ markbad:
 ; display test results
 show_report:
 .(
-; *** Durango-X specifics, init vectored iterrupts, just in case ***
-	LDX #>reset
-	LDY #<reset
-	STY nmi_ptr				; NMI button will reset the test, not the bootloader
-	STX nmi_ptr+1
-	LDX #>null
-	LDY #<null
-	STY irq_ptr				; IRQ will do nothing, for extra safety
-	STX irq_ptr+1
-; ***
 ;	sta TXTSET 		; turn on text
 	JSR show_banner
 ;	puts_at 1,0, "GITHUB.COM/MISTERBLACK1/APPLEII_DEADTEST"
@@ -525,6 +514,7 @@ next_page:
 		LDY #2				; print the heading row
 		JSR con_goto
 		TXA
+		ORA #$80			; *** these in are ROM address space
 		STX con_xsave		; *** hope this works!
 		JSR con_put_hex
 		INC con_loc
@@ -558,7 +548,8 @@ next:
 		LDX con_xsave		; *** must retrieve!
 		INX					; look for the next page
 		TXA					; compare to the last page to test
-;		CMP mu_page_end
+		EOR #$80			; *** ROM address space (if reaches $80 will turn into zero)
+		CMP mu_page_end
 		BNE next_page		; continue if there are more to print
 
 	LDA all_errs
@@ -699,6 +690,7 @@ show_banner:
 	STY con_loc
 	STX con_loc+1
 	LDA mu_page_st			; no need to subtract from start page
+	ORA #$80				; *** into ROM address space
 	JSR con_put_hex
 	RTS
 .)
@@ -764,24 +756,8 @@ page_head:
 	.asc	"PAGE", 0
 
 ; *** 8x4 font (ASCII 32-95) for quick inline display ***
-; notice MOD 64!
 font:
-	.byt	24, 44, 32, 24,		24, 36, 60, 36,		56, 36, 56, 60,		28, 32, 32, 28	; @ABC
-	.byt	56, 36, 36, 56,		60, 32, 56, 60,		60, 32, 56, 32,		24, 32, 44, 56	; DEFG
-	.byt	36, 36, 60, 36,		28, 8, 8, 28,		4, 4, 36, 24,		32, 40, 48, 40	; HIJK
-	.byt	32, 32, 32, 60,		34, 54, 42, 34,		36, 52, 44, 36,		60, 36, 36, 60	; LMNO
-	.byt	56, 36, 56, 32,		24, 36, 36, 26,		56, 36, 56, 36,		28, 32, 28, 56	; PQRS
-	.byt	62, 8, 8, 8,		36, 36, 36, 24,		34, 34, 20, 8,		34, 34, 42, 20	; TUVW
-	.byt	36, 24, 24, 36,		34, 20, 8, 16,		60, 8, 16, 60,		24, 16, 16, 24	; XYZ[
-	.byt	32, 16, 8, 4,		24, 8, 8, 24,		8, 20, 0, 0,		0, 0, 0, 255	; \] caret _
-	.byt	0, 0, 0, 0,			8, 8, 0, 8,			20, 20, 0, 0,		36, 126, 36,126	;  !"#
-	.byt	8, 30, 60, 8,		36, 8, 16, 36,		48, 42, 68, 122,	8, 8, 0, 0		; $%&'
-	.byt	8, 16, 16, 8,		16, 8, 8, 16,		8, 42, 28, 42,		0, 8, 28, 8		; ()*+
-	.byt	0, 0, 8, 16,		0, 0, 28, 0,		0, 0, 0, 8,			4, 8, 16, 32	; ,-./
-	.byt	24, 36, 36, 24,		8, 24, 8, 28,		24, 36, 8, 30,		60, 4, 24, 60	; 0123
-	.byt	8, 24, 56, 8,		60, 32, 28, 56,		28, 32, 62, 28,		60, 8, 16, 32	; 4567
-	.byt	24, 36, 24, 60,		24, 60, 4, 56,		0, 8, 0, 8,			8, 0, 8, 16 	; 89:;
-	.byt	0, 8, 16, 8,		0, 60, 0, 60,		0, 16, 8, 16,		24, 36, 8, 8	; <=>?
+#include	"8x4font.s"
 
 #ifndef	POCKET
 pay_end:					; end of payload
