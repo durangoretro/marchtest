@@ -1,7 +1,7 @@
 ; march-U test for ShadowRAM in Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250708-1123
+; last modified 20250708-1148
 
 ; xa shadow_m.s
 ; add -DPOCKET for non-cartridge version
@@ -74,9 +74,9 @@ rom_start:
 ; NEW main commit (user field 1)
 	.asc	"$$$$$$$$"
 ; NEW coded version number
-	.word	$1002			; 1.0a2		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
+	.word	$1042			; 1.0b2		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
 ; date & time in MS-DOS format at byte 248 ($F8)
-	.word	$5C00			; time, 11.32		0101 1-100 000-0 0000
+	.word	$5E00			; time, 11.48		0101 1-110 000-0 0000
 	.word	$5AE8			; date, 2025/7/8	0101 101-0 111-0 1000
 ; filesize in top 32 bits (@ $FC) now including header ** must be EVEN number of pages because of 512-byte sectors
 	.word	file_end-rom_start			; actual executable size
@@ -135,7 +135,7 @@ start:						; payload starts here
 ; *******************************************************************************
 	JSR show_banner			; init screen
 ; *** switch into ShadowRAM, ROM is no longer needed
-	LDA #%01111100			; ROM disabled, protected RAM, and SD disabled just in case
+	LDA #%01011100			; ROM disabled, UNprotected RAM, and SD disabled just in case
 	STA IOCart				; switch into ShadowRAM!
 
  	JSR count_ram			; count how much ShadowRAM is installed -- usually 32 KiB
