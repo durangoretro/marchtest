@@ -1,7 +1,7 @@
 ; march-U test for ShadowRAM in Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250708-1148
+; last modified 20250708-1213
 
 ; xa shadow_m.s
 ; add -DPOCKET for non-cartridge version
@@ -74,9 +74,9 @@ rom_start:
 ; NEW main commit (user field 1)
 	.asc	"$$$$$$$$"
 ; NEW coded version number
-	.word	$1042			; 1.0b2		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
+	.word	$1043			; 1.0b3		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
 ; date & time in MS-DOS format at byte 248 ($F8)
-	.word	$5E00			; time, 11.48		0101 1-110 000-0 0000
+	.word	$6180			; time, 12.12		0110 0-001 100-0 0000
 	.word	$5AE8			; date, 2025/7/8	0101 101-0 111-0 1000
 ; filesize in top 32 bits (@ $FC) now including header ** must be EVEN number of pages because of 512-byte sectors
 	.word	file_end-rom_start			; actual executable size
@@ -133,12 +133,12 @@ start:						; payload starts here
 ; *******************************************************************************
 ; *** let's assume ZP, stack and normal RAM are fine, let's go for the Shadow ***
 ; *******************************************************************************
-	JSR show_banner			; init screen
 ; *** switch into ShadowRAM, ROM is no longer needed
 	LDA #%01011100			; ROM disabled, UNprotected RAM, and SD disabled just in case
 	STA IOCart				; switch into ShadowRAM!
 
  	JSR count_ram			; count how much ShadowRAM is installed -- usually 32 KiB
+	JSR show_banner			; init screen
 
 ; some beep
 	BEEP($20,$C0)
@@ -320,13 +320,22 @@ marchU:
 init:	
 		LDA #0				; low bits 0 so we test a hardware page at a time
 		STA mu_ptr
-		LDY #$00			; Y will be the pointer into the page
+
 		LDX mu_test_idx		; get the index to the test value pages
 		LDA tst_tbl,X		; get the test value into A
 		TAX					; X will contain the test val throughout marchU
+
+		LDY #31				; *** write value pattern on some line
+mul:
+			STA $6FE0, Y
+			DEY
+			BPL mul
+
+
 		LDA mu_page_st
 		STA mu_ptr+1
-	
+		LDY #$00			; Y will be the pointer into the page
+
 		; lda #08
 		; sta results+$19
 		; lda #01
