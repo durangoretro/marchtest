@@ -1,7 +1,7 @@
 ; march-U test for ShadowRAM in Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250708-1236
+; last modified 20250708-1242
 
 ; xa shadow_m.s
 ; add -DPOCKET for non-cartridge version
@@ -76,7 +76,7 @@ rom_start:
 ; NEW coded version number
 	.word	$1044			; 1.0b4		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
 ; date & time in MS-DOS format at byte 248 ($F8)
-	.word	$6480			; time, 12.36		0110 0-100 100-0 0000
+	.word	$6600			; time, 12.48		0110 0-110 000-0 0000
 	.word	$5AE8			; date, 2025/7/8	0101 101-0 111-0 1000
 ; filesize in top 32 bits (@ $FC) now including header ** must be EVEN number of pages because of 512-byte sectors
 	.word	file_end-rom_start			; actual executable size
@@ -285,7 +285,7 @@ page:
 		STA (mu_ptr)		; store page number (all CMOS)
 		INC					; try next page
 		BNE page
-	LDA mu_ptr+1			; this should be first shadow page (upper mirroring)
+	LDA $807F				; this should be first shadow page (upper mirroring) EEEEEEEEK
 	STA mu_page_st			; start page EEEEEEEK
 	STZ mu_page_end			; ShadowRAM "end"
 	RTS
