@@ -1,7 +1,7 @@
 ; march-U test for Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250707-1447
+; last modified 20250708-1124
 
 ; xa march.s
 ; add -DPOCKET for non-cartridge, standard RAM version
@@ -74,10 +74,10 @@ rom_start:
 ; NEW main commit (user field 1)
 	.asc	"$$$$$$$$"
 ; NEW coded version number
-	.word	$1043			; 1.0b3		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
+	.word	$1044			; 1.0b4		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
 ; date & time in MS-DOS format at byte 248 ($F8)
-	.word	$7600			; time, 14.40		0111 0-110 000-0 0000
-	.word	$5AE7			; date, 2025/7/7	0101 101-0 111-0 0111
+	.word	$5C00			; time, 11.32		0101 1-100 000-0 0000
+	.word	$5AE8			; date, 2025/7/8	0101 101-0 111-0 1000
 ; filesize in top 32 bits (@ $FC) now including header ** must be EVEN number of pages because of 512-byte sectors
 	.word	file_end-rom_start			; actual executable size
 	.word	0							; 64K space does not use upper 16 bits, [255]=NUL may be third magic number
@@ -1058,24 +1058,8 @@ page_head:
 	.asc	"PAGE", 0
 
 ; *** 8x4 font (ASCII 32-95) for quick inline display ***
-; notice MOD 64!
 font:
-	.byt	24, 44, 32, 24,		24, 36, 60, 36,		56, 36, 56, 60,		28, 32, 32, 28	; @ABC
-	.byt	56, 36, 36, 56,		60, 32, 56, 60,		60, 32, 56, 32,		24, 32, 44, 56	; DEFG
-	.byt	36, 36, 60, 36,		28, 8, 8, 28,		4, 4, 36, 24,		32, 40, 48, 40	; HIJK
-	.byt	32, 32, 32, 60,		34, 54, 42, 34,		36, 52, 44, 36,		60, 36, 36, 60	; LMNO
-	.byt	56, 36, 56, 32,		24, 36, 36, 26,		56, 36, 56, 36,		28, 32, 28, 56	; PQRS
-	.byt	62, 8, 8, 8,		36, 36, 36, 24,		34, 34, 20, 8,		34, 34, 42, 20	; TUVW
-	.byt	36, 24, 24, 36,		34, 20, 8, 16,		60, 8, 16, 60,		24, 16, 16, 24	; XYZ[
-	.byt	32, 16, 8, 4,		24, 8, 8, 24,		8, 20, 0, 0,		0, 0, 0, 255	; \] caret _
-	.byt	0, 0, 0, 0,			8, 8, 0, 8,			20, 20, 0, 0,		36, 126, 36,126	;  !"#
-	.byt	8, 30, 60, 8,		36, 8, 16, 36,		48, 42, 68, 122,	8, 8, 0, 0		; $%&'
-	.byt	8, 16, 16, 8,		16, 8, 8, 16,		8, 42, 28, 42,		0, 8, 28, 8		; ()*+
-	.byt	0, 0, 8, 16,		0, 0, 28, 0,		0, 0, 0, 8,			4, 8, 16, 32	; ,-./
-	.byt	24, 36, 36, 24,		8, 24, 8, 28,		24, 36, 8, 30,		60, 4, 24, 60	; 0123
-	.byt	8, 24, 56, 8,		60, 32, 28, 56,		28, 32, 62, 28,		60, 8, 16, 32	; 4567
-	.byt	24, 36, 24, 60,		24, 60, 4, 56,		0, 8, 0, 8,			8, 0, 8, 16 	; 89:;
-	.byt	0, 8, 16, 8,		0, 60, 0, 60,		0, 16, 8, 16,		24, 36, 8, 8	; <=>?
+#include	"8x4font.s"
 
 #ifndef	POCKET
 ; ***************************
