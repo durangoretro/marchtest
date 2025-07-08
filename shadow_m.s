@@ -1,7 +1,7 @@
 ; march-U test for ShadowRAM in Durango home retrocomputers!
 ; (c) 2025 Carlos J. Santisteban
 ; based on https://github.com/misterblack1/appleII_deadtest/
-; last modified 20250708-1213
+; last modified 20250708-1236
 
 ; xa shadow_m.s
 ; add -DPOCKET for non-cartridge version
@@ -74,9 +74,9 @@ rom_start:
 ; NEW main commit (user field 1)
 	.asc	"$$$$$$$$"
 ; NEW coded version number
-	.word	$1043			; 1.0b3		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
+	.word	$1044			; 1.0b4		%vvvvrrrr sshhbbbb, where revision = %hhrrrr, ss = %00 (alpha), %01 (beta), %10 (RC), %11 (final)
 ; date & time in MS-DOS format at byte 248 ($F8)
-	.word	$6180			; time, 12.12		0110 0-001 100-0 0000
+	.word	$6480			; time, 12.36		0110 0-100 100-0 0000
 	.word	$5AE8			; date, 2025/7/8	0101 101-0 111-0 1000
 ; filesize in top 32 bits (@ $FC) now including header ** must be EVEN number of pages because of 512-byte sectors
 	.word	file_end-rom_start			; actual executable size
@@ -286,7 +286,7 @@ page:
 		INC					; try next page
 		BNE page
 	LDA mu_ptr+1			; this should be first shadow page (upper mirroring)
-	STA mu_page_st			; start page
+	STA mu_page_st			; start page EEEEEEEK
 	STZ mu_page_end			; ShadowRAM "end"
 	RTS
 .)
@@ -312,7 +312,7 @@ marchU:
 ;	sta MIXSET			; mixed mode on
 
 ;	LDA #FIRST_PAGE			; set starting address (maybe change later to a parameter?)
-;	STA mu_page_st			; *** already done by count_ram ***
+;	STA 			; *** already done by count_ram ***
 
 	LDA #(tst_tbl_end-tst_tbl-1) ; number of test values
 	STA mu_test_idx
@@ -454,9 +454,7 @@ step4:
 			BCS step4		; if not there yet (mu_ptr+1>=mu_page_st so carry set), loop again
 	
 ; now, determine whether to repeat with a new test value
-		LDX mu_test_idx
-		DEX
-		STX mu_test_idx
+		DEC mu_test_idx
 	
 	BMI show_report			; we're done with all values, so show results
 	
